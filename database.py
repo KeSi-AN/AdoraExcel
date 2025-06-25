@@ -12,19 +12,18 @@ from datetime import datetime
 load_dotenv()
 
 # PostgreSQL local Configuration
-# POSTGRES_USER = os.getenv('POSTGRES_USER', 'postgres')
-# POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD', 'Sweethome%40143')
-# POSTGRES_HOST = os.getenv('POSTGRES_HOST', 'localhost')
-# POSTGRES_PORT = os.getenv('POSTGRES_PORT', '5432')
-# POSTGRES_DB = os.getenv('POSTGRES_DB', 'Adora_AI')
+POSTGRES_USER = os.getenv('POSTGRES_USER', 'postgres')
+POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD', 'Sweethome%40143')
+POSTGRES_HOST = os.getenv('POSTGRES_HOST', 'localhost')
+POSTGRES_PORT = os.getenv('POSTGRES_PORT', '5432')
+POSTGRES_DB = os.getenv('POSTGRES_DB', 'Adora_AI')
 
 
 
 
-# DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}?sslmode=require&channel_binding=require"
 
 # Azure Config
-DATABASE_URL = "postgresql://neondb_owner:npg_NY1xGKUXDE5P@ep-hidden-shadow-a8ha0xov-pooler.eastus2.azure.neon.tech/neondb?sslmode=require&channel_binding=require"
 
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
