@@ -67,20 +67,36 @@ def extract_all_tables(file_path: str) -> Dict[str, Dict[str, List[Dict]]]:
         raise Exception(f"Error processing Excel file: {str(e)}")
 
 def save_uploaded_file(uploaded_file, upload_folder: str) -> tuple:
-    """Save uploaded file to disk and return its path and hash."""
+    """
+    Save uploaded file to disk and return its path and hash.
+    Preserves the original filename, adds a timestamp, and prevents duplicates.
+    """
     os.makedirs(upload_folder, exist_ok=True)
     
-    # Create a safe filename
+    # Get the original filename and create a safe version
+    original_name = uploaded_file.name
+    safe_name = re.sub(r'[^\w\-. ]', '_', original_name)
+    
+    # Add timestamp to the filename (before the extension)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_name = re.sub(r'[^\w.-]', '_', uploaded_file.name)
-    unique_name = f"{timestamp}_{safe_name}"
-    file_path = os.path.join(upload_folder, unique_name)
+    base_name, ext = os.path.splitext(safe_name)
+    safe_name = f"{base_name}_{timestamp}{ext}"
+    
+    # Check if file already exists and create a unique name if needed
+    file_path = os.path.join(upload_folder, safe_name)
+    counter = 1
+    
+    while os.path.exists(file_path):
+        # If file exists (unlikely with timestamp), append a counter before the extension
+        file_path = os.path.join(upload_folder, f"{base_name}_{timestamp}_{counter}{ext}")
+        counter += 1
     
     # Save the file
+    file_content = uploaded_file.getvalue()
     with open(file_path, "wb") as f:
-        f.write(uploaded_file.getvalue())
+        f.write(file_content)
     
-    # Calculate file hash
-    file_hash = calculate_file_hash(uploaded_file.getvalue())
+    # Calculate file hash from the content
+    file_hash = calculate_file_hash(file_content)
     
     return file_path, file_hash

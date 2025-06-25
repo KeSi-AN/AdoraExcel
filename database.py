@@ -3,20 +3,29 @@ from sqlalchemy.orm import sessionmaker, scoped_session
 from contextlib import contextmanager
 import os
 from dotenv import load_dotenv
-from models import Base, ExcelFile, ExcelTable
+from models import Base, ExcelFile, ExcelTable, ChatHistory, MessageRole
 from typing import Generator, Optional, Dict, Any, List, Tuple
 from sqlalchemy.exc import SQLAlchemyError
+from datetime import datetime
 
 # Load environment variables
 load_dotenv()
 
-# PostgreSQL Configuration
-POSTGRES_USER = os.getenv('POSTGRES_USER', 'postgres')
-POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD', 'Sweethome%40143')
-POSTGRES_HOST = os.getenv('POSTGRES_HOST', 'localhost')
-POSTGRES_PORT = os.getenv('POSTGRES_PORT', '5432')
-POSTGRES_DB = os.getenv('POSTGRES_DB', 'Adora_AI')
-DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+# PostgreSQL local Configuration
+# POSTGRES_USER = os.getenv('POSTGRES_USER', 'postgres')
+# POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD', 'Sweethome%40143')
+# POSTGRES_HOST = os.getenv('POSTGRES_HOST', 'localhost')
+# POSTGRES_PORT = os.getenv('POSTGRES_PORT', '5432')
+# POSTGRES_DB = os.getenv('POSTGRES_DB', 'Adora_AI')
+
+
+
+
+# DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+
+# Azure Config
+DATABASE_URL = "postgresql://neondb_owner:npg_NY1xGKUXDE5P@ep-hidden-shadow-a8ha0xov-pooler.eastus2.azure.neon.tech/neondb?sslmode=require&channel_binding=require"
+
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -38,11 +47,33 @@ def init_db():
     """Initialize the database tables."""
     Base.metadata.create_all(bind=engine)
 
-def is_duplicate_file(file_hash: str) -> bool:
-    """Check if a file with the given hash already exists in the database."""
+def is_duplicate_file(file_hash: str, file_name: str = None) -> Tuple[bool, str]:
+    """
+    Check if a file with the given hash or filename already exists in the database.
+    
+    Args:
+        file_hash: The hash of the file to check
+        file_name: Optional original filename to check
+        
+    Returns:
+        Tuple of (is_duplicate, message) where message explains the reason
+    """
     with get_db_session() as db_session:
-        existing_file = db_session.query(ExcelFile).filter(ExcelFile.file_hash == file_hash).first()
-        return existing_file is not None
+        # First check by hash (exact duplicate)
+        existing_by_hash = db_session.query(ExcelFile).filter(ExcelFile.file_hash == file_hash).first()
+        if existing_by_hash:
+            return True, "This exact file has already been uploaded."
+            
+        # Then check by filename if provided
+        if file_name:
+            existing_by_name = db_session.query(ExcelFile).filter(
+                ExcelFile.file_name.ilike(f"%{os.path.basename(file_name)}")
+            ).first()
+            
+            if existing_by_name:
+                return True, f"A file with the name '{os.path.basename(file_name)}' already exists in the database. Please use a different filename or delete the existing one first."
+                
+        return False, ""
 
 def save_excel_file(file_name: str, file_path: str, file_hash: str, tables_data: Dict[str, Any]) -> Optional[int]:
     """Save Excel file and its tables to the database."""
@@ -178,10 +209,147 @@ def duplicate_excel_file(file_id: int) -> tuple[bool, str, int]:
             return False, f"Error duplicating file: {str(e)}", -1
 
 
+def get_chat_history(file_id: int, sheet_name: str = None) -> list:
+    """
+    Retrieve chat history for a specific file and optional sheet.
+    
+    Args:
+        file_id: ID of the file to get chat history for
+        sheet_name: Optional name of the sheet to filter by
+        
+    Returns:
+        list: List of chat messages in the format [{"role": "user"|"assistant", "content": str, "created_at": str}]
+    """
+    with get_db_session() as db_session:
+        try:
+            query = db_session.query(ChatHistory).filter(
+                ChatHistory.excel_file_id == file_id
+            )
+            
+            if sheet_name:
+                query = query.filter(ChatHistory.sheet_name == sheet_name)
+                
+            messages = query.order_by(ChatHistory.created_at.asc()).all()
+            
+            # Convert SQLAlchemy objects to dictionaries
+            return [
+                {
+                    'role': msg.role,
+                    'content': msg.content,
+                    'created_at': msg.created_at.isoformat(),
+                    'sheet_name': msg.sheet_name
+                }
+                for msg in messages
+            ]
+            
+        except Exception as e:
+            print(f"Error getting chat history: {str(e)}")
+            return []
+
+def get_all_chat_history(file_id: int) -> list:
+    """
+    Retrieve all chat history for a specific file, across all sheets.
+    
+    Args:
+        file_id: ID of the file to get chat history for
+        
+    Returns:
+        list: List of chat messages with sheet information
+    """
+    with get_db_session() as db_session:
+        try:
+            messages = db_session.query(ChatHistory).filter(
+                ChatHistory.excel_file_id == file_id
+            ).order_by(
+                ChatHistory.sheet_name,
+                ChatHistory.created_at.asc()
+            ).all()
+            
+            return [
+                {
+                    'id': msg.id,
+                    'role': msg.role,
+                    'content': msg.content,
+                    'created_at': msg.created_at,
+                    'sheet_name': msg.sheet_name or 'default'
+                }
+                for msg in messages
+            ]
+            
+        except Exception as e:
+            print(f"Error getting all chat history: {str(e)}")
+            return []
+
+def save_chat_history(file_id: int, messages: list, sheet_name: str = None) -> bool:
+    """
+    Save chat history for a specific file and sheet.
+    
+    Args:
+        file_id: ID of the file to save chat history for
+        messages: List of chat messages in the format [{"role": "user"|"assistant", "content": str}]
+        sheet_name: Name of the sheet this chat is for (defaults to None for all sheets)
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    if not messages:
+        return False
+        
+    with get_db_session() as db_session:
+        try:
+            # Get existing message hashes to avoid duplicates
+            existing_hashes = set()
+            existing_messages = db_session.query(ChatHistory).filter(
+                ChatHistory.excel_file_id == file_id,
+                ChatHistory.sheet_name == sheet_name
+            ).all()
+            
+            # Create a set of existing message content hashes
+            for msg in existing_messages:
+                msg_hash = hash((msg.content, str(msg.role), str(msg.sheet_name)))
+                existing_hashes.add(msg_hash)
+            
+            # Prepare new messages with proper enum values
+            chat_messages = []
+            for msg in messages:
+                try:
+                    # Skip if message is already in the database
+                    msg_hash = hash((msg["content"], msg["role"], sheet_name))
+                    if msg_hash in existing_hashes:
+                        continue
+                        
+                    # Convert string role to MessageRole enum
+                    if isinstance(msg["role"], str):
+                        role_enum = MessageRole[msg["role"].upper()]
+                    else:
+                        role_enum = msg["role"]
+                    
+                    chat_messages.append({
+                        "excel_file_id": file_id,
+                        "sheet_name": sheet_name,
+                        "role": role_enum,
+                        "content": msg["content"],
+                        "created_at": msg.get("created_at") or datetime.utcnow()
+                    })
+                except (KeyError, AttributeError) as e:
+                    print(f"Warning: Invalid message format, skipping: {e}")
+                    continue
+            
+            # Bulk insert only new messages
+            if chat_messages:
+                db_session.bulk_insert_mappings(ChatHistory, chat_messages)
+                db_session.commit()
+                return True
+            return False
+            
+        except SQLAlchemyError as e:
+            db_session.rollback()
+            print(f"Error saving chat history: {str(e)}")
+            return False
+
 def delete_excel_file(file_id: int) -> tuple[bool, str]:
     """
     Delete an Excel file and its associated data from both database and file system.
-    Then renumber remaining files to maintain sequential order.
     
     Args:
         file_id: ID of the file to delete
@@ -198,10 +366,10 @@ def delete_excel_file(file_id: int) -> tuple[bool, str]:
                 
             file_path = file_to_delete.file_path
             
-            # Get all files ordered by ID to determine new numbering
-            all_files = db_session.query(ExcelFile).order_by(ExcelFile.id).all()
+            # Delete associated chat history first
+            db_session.query(ChatHistory).filter(ChatHistory.excel_file_id == file_id).delete()
             
-            # Delete associated tables first (due to foreign key constraint)
+            # Delete associated tables next
             db_session.query(ExcelTable).filter(ExcelTable.excel_file_id == file_id).delete()
             
             # Delete the file record from database
@@ -217,40 +385,14 @@ def delete_excel_file(file_id: int) -> tuple[bool, str]:
                     if os.path.exists(directory) and not os.listdir(directory):
                         os.rmdir(directory)
                 
-                # Get remaining files after deletion
-                remaining_files = db_session.query(ExcelFile).order_by(ExcelFile.id).all()
-                
-                # Update file names to maintain sequential numbering
-                for index, file in enumerate(remaining_files, 1):
-                    # Extract file extension
-                    file_name = file.file_name
-                    file_ext = os.path.splitext(file_name)[1] if '.' in file_name else ''
-                    
-                    # Create new file name with sequential number
-                    new_name = f"file{index}{file_ext}"
-                    
-                    # If name is changing, update the database and rename the file
-                    if file_name != new_name:
-                        # Update database record
-                        file.file_name = new_name
-                        
-                        # Update file path
-                        old_path = file.file_path
-                        new_path = os.path.join(os.path.dirname(old_path), new_name)
-                        file.file_path = new_path
-                        
-                        # Rename the actual file
-                        if os.path.exists(old_path):
-                            os.rename(old_path, new_path)
-                
                 db_session.commit()
-                return True, "File deleted and numbering updated successfully"
+                return True, "File deleted successfully"
                 
             except Exception as e:
-                # If file operations fail, log the error but still return success for DB operation
+                # If file operations fail, rollback the transaction
+                db_session.rollback()
                 import logging
                 logging.error(f"Error during file operations: {str(e)}")
-                db_session.rollback()
                 return False, f"Error during file operations: {str(e)}"
                 
         except SQLAlchemyError as e:
