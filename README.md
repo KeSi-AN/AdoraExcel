@@ -1,4 +1,4 @@
-# 📄 AI-Powered Excel Parser Pro
+# 📄 AI-Powered Excel ChatBot
 
 [![Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://streamlit.io/)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
@@ -28,8 +28,8 @@
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/Excel-parser-pro.git
-   cd Excel-parser-pro
+   git clone https://github.com/yourusername/Excel-Chat-Bot.git
+   cd Excel-Chat-Bot
    ```
 
 2. **Set up environment variables**
@@ -80,7 +80,7 @@
 ## 🏗️ Project Structure
 
 ```
-Excel-parser-pro/
+Excel-Chat-Bot/
 ├── .env.example
 ├── .gitignore
 ├── README.md
