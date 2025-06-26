@@ -14,7 +14,7 @@
 - 🔍 Browse and search through uploaded files
 - 💬 Chat with your data using natural language (coming soon)
 - 🗄️ Store and manage files in a PostgreSQL database
-- **Persistent Storage**: SQLite database for storing resume data
+- **Persistent Storage**: SQLite database for storing Excel data
 - **Advanced Search**: Filter and search through Excels using various criteria
 
 ## 🚀 Quick Start
@@ -29,7 +29,7 @@
 1. **Clone the repository**
    ```bash
    git clone https://github.com/yourusername/Excel-parser-pro.git
-   cd resume-parser-pro
+   cd Excel-parser-pro
    ```
 
 2. **Set up environment variables**
@@ -53,7 +53,7 @@
 
 ## 🛠️ Features in Detail
 
-### 📤 Upload Resumes
+### 📤 Upload Excels
 - Drag and drop or select Excel files
 - Automatic duplicate detection
 - Batch upload support
@@ -86,7 +86,7 @@ Excel-parser-pro/
 ├── README.md
 ├── app.py              # Main application
 ├── requirements.txt     # Python dependencies
-├── uploads/             # Store uploaded resumes
+├── uploads/             # Store uploaded Excels
 └── Excel_database.db   # SQLite database
 ```
 
